@@ -13,6 +13,8 @@
 		AA0000000000000000000004 /* ClockifyWatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000104 /* ClockifyWatcherTests.swift */; };
 		BB0000000000000000000001 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000003 /* KeychainHelper.swift */; };
 		BB0000000000000000000002 /* KeychainHelperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000004 /* KeychainHelperTests.swift */; };
+		CC0000000000000000000001 /* ClockifyClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000003 /* ClockifyClient.swift */; };
+		CC0000000000000000000002 /* ClockifyClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000004 /* ClockifyClientTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -33,6 +35,8 @@
 		AA0000000000000000000104 /* ClockifyWatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockifyWatcherTests.swift; sourceTree = "<group>"; };
 		BB0000000000000000000003 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		BB0000000000000000000004 /* KeychainHelperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelperTests.swift; sourceTree = "<group>"; };
+		CC0000000000000000000003 /* ClockifyClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockifyClient.swift; sourceTree = "<group>"; };
+		CC0000000000000000000004 /* ClockifyClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockifyClientTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000401 /* ClockifyWatcher.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClockifyWatcher.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000402 /* ClockifyWatcherTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClockifyWatcherTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -70,6 +74,7 @@
 				AA0000000000000000000101 /* main.swift */,
 				AA0000000000000000000102 /* AppDelegate.swift */,
 				BB0000000000000000000003 /* KeychainHelper.swift */,
+				CC0000000000000000000003 /* ClockifyClient.swift */,
 				AA0000000000000000000103 /* Assets.xcassets */,
 				AA0000000000000000000105 /* Info.plist */,
 			);
@@ -81,6 +86,7 @@
 			children = (
 				AA0000000000000000000104 /* ClockifyWatcherTests.swift */,
 				BB0000000000000000000004 /* KeychainHelperTests.swift */,
+				CC0000000000000000000004 /* ClockifyClientTests.swift */,
 			);
 			path = ClockifyWatcherTests;
 			sourceTree = "<group>";
@@ -188,6 +194,7 @@
 				AA0000000000000000000001 /* main.swift in Sources */,
 				AA0000000000000000000002 /* AppDelegate.swift in Sources */,
 				BB0000000000000000000001 /* KeychainHelper.swift in Sources */,
+				CC0000000000000000000001 /* ClockifyClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -197,6 +204,7 @@
 			files = (
 				AA0000000000000000000004 /* ClockifyWatcherTests.swift in Sources */,
 				BB0000000000000000000002 /* KeychainHelperTests.swift in Sources */,
+				CC0000000000000000000002 /* ClockifyClientTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
