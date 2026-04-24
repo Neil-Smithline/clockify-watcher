@@ -50,10 +50,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             button.attributedTitle = NSAttributedString(string: "")
         }
-        // Rebuild menu so checkmarks stay current
-        let menu = buildMenu()
-        menu.delegate = self
-        statusItem.menu = menu
+        // Update checkmarks in the existing menu rather than rebuilding
+        updateMenuCheckmarks()
+    }
+
+    func updateMenuCheckmarks() {
+        guard let menu = statusItem.menu else { return }
+        for item in menu.items {
+            guard let projectId = item.representedObject as? String else { continue }
+            item.state = projectId == activeProjectId ? .on : .off
+        }
     }
 
     // MARK: - Session management
