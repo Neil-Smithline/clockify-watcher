@@ -11,7 +11,7 @@ enum KeychainHelper {
             kSecAttrAccount: account,
             kSecValueData: data
         ]
-        SecItemAdd(query as CFDictionary, nil)
+        _ = SecItemAdd(query as CFDictionary, nil)
     }
 
     static func load(service: String, account: String) -> String? {
@@ -34,7 +34,7 @@ enum KeychainHelper {
             kSecAttrService: service,
             kSecAttrAccount: account
         ]
-        SecItemDelete(query as CFDictionary)
+        _ = SecItemDelete(query as CFDictionary)
     }
 
     // App-level convenience

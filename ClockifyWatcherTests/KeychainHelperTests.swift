@@ -5,6 +5,11 @@ final class KeychainHelperTests: XCTestCase {
     let testService = "clockify-watcher-test"
     let testAccount = "api-key"
 
+    override func setUp() {
+        super.setUp()
+        KeychainHelper.delete(service: testService, account: testAccount)
+    }
+
     override func tearDown() {
         KeychainHelper.delete(service: testService, account: testAccount)
     }
