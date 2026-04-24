@@ -31,6 +31,11 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(formatElapsed(from: start), "2:05")
     }
 
+    func testElapsedFutureStartClampsToZero() {
+        let start = Date(timeIntervalSinceNow: 60)  // 1 minute in the future
+        XCTAssertEqual(formatElapsed(from: start), "0:00")
+    }
+
     // MARK: - Hex color
 
     func testHexColorWithHash() {

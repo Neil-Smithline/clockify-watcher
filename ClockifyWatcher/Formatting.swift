@@ -1,7 +1,7 @@
 import AppKit
 
 func formatElapsed(from start: Date) -> String {
-    let seconds = Int(Date().timeIntervalSince(start))
+    let seconds = max(0, Int(Date().timeIntervalSince(start)))
     let hours = seconds / 3600
     let minutes = (seconds % 3600) / 60
     return "\(hours):\(String(format: "%02d", minutes))"
