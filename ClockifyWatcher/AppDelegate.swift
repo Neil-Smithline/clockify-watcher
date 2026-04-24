@@ -115,9 +115,81 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
-    func initialize() async {}
+    func initialize() async {
+        guard let client else { return }
+        do {
+            let user = try await client.fetchUser()
+            userId = user.id
+            workspaceId = user.activeWorkspace
+            let projects = try await client.fetchProjects(workspaceId: user.activeWorkspace)
+            cachedProjects = Dictionary(uniqueKeysWithValues: projects.map { ($0.id, $0) })
+        } catch ClockifyError.unauthorized {
+            await MainActor.run {
+                KeychainHelper.deleteApiKey()
+                promptForApiKey(error: "Session expired. Please re-enter your API key.")
+            }
+            return
+        } catch {
+            // Network error on launch — will retry on next poll
+        }
+        await MainActor.run { startPolling() }
+    }
+
+    private func startPolling() {
+        poll()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.poll()
+        }
+    }
+
+    func poll() {
+        guard let client, let workspaceId, let userId else { return }
+        Task {
+            do {
+                let entry = try await client.fetchRunningEntry(workspaceId: workspaceId, userId: userId)
+                await MainActor.run {
+                    self.consecutiveFailures = 0
+                    if let entry, let projectId = entry.projectId {
+                        self.activeProjectId = projectId
+                        self.activeEntryStart = entry.timeInterval.start
+                        if self.cachedProjects[projectId] == nil {
+                            Task { await self.refreshProjects() }
+                        }
+                    } else {
+                        self.activeProjectId = nil
+                        self.activeEntryStart = nil
+                    }
+                    self.updateStatusItem()
+                }
+            } catch ClockifyError.unauthorized {
+                await MainActor.run {
+                    self.pollTimer?.invalidate()
+                    KeychainHelper.deleteApiKey()
+                    self.promptForApiKey(error: "Session expired. Please re-enter your API key.")
+                }
+            } catch {
+                await MainActor.run {
+                    self.consecutiveFailures += 1
+                    self.updateStatusItem()
+                }
+            }
+        }
+    }
+
+    func refreshProjects() async {
+        guard let client, let workspaceId else { return }
+        do {
+            let projects = try await client.fetchProjects(workspaceId: workspaceId)
+            await MainActor.run {
+                self.cachedProjects = Dictionary(uniqueKeysWithValues: projects.map { ($0.id, $0) })
+                self.updateStatusItem()
+            }
+        } catch {
+            // Silently ignore — retry on next menu open or unknown projectId
+        }
+    }
+
     func buildMenu() -> NSMenu { NSMenu() }
-    func refreshProjects() async {}
 }
 
 extension AppDelegate: NSMenuDelegate {
