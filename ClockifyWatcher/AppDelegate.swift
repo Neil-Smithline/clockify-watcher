@@ -189,7 +189,73 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func buildMenu() -> NSMenu { NSMenu() }
+    func buildMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        let sortedProjects = cachedProjects.values.sorted { $0.name < $1.name }
+        for project in sortedProjects {
+            let item = NSMenuItem(title: project.name,
+                                  action: #selector(switchProject(_:)),
+                                  keyEquivalent: "")
+            item.representedObject = project.id
+            item.target = self
+            item.state = project.id == activeProjectId ? .on : .off
+            menu.addItem(item)
+        }
+
+        menu.addItem(.separator())
+
+        let openApp = NSMenuItem(title: "Open Clockify App",
+                                 action: #selector(openClockifyApp),
+                                 keyEquivalent: "")
+        openApp.target = self
+        menu.addItem(openApp)
+
+        let openBrowser = NSMenuItem(title: "Open in Browser",
+                                     action: #selector(openInBrowser),
+                                     keyEquivalent: "")
+        openBrowser.target = self
+        menu.addItem(openBrowser)
+
+        menu.addItem(.separator())
+
+        menu.addItem(NSMenuItem(title: "Quit",
+                                action: #selector(NSApplication.terminate(_:)),
+                                keyEquivalent: "q"))
+        return menu
+    }
+
+    @objc func switchProject(_ sender: NSMenuItem) {
+        guard let projectId = sender.representedObject as? String,
+              projectId != activeProjectId,
+              let client, let workspaceId, let userId else { return }
+        Task {
+            do {
+                if activeProjectId != nil {
+                    try await client.stopCurrentTimer(workspaceId: workspaceId, userId: userId)
+                }
+                try await client.startTimer(workspaceId: workspaceId, projectId: projectId)
+                poll()
+            } catch {
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "Failed to switch project"
+                    alert.informativeText = error.localizedDescription
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    @objc func openClockifyApp() {
+        let appURL = URL(fileURLWithPath: "/Applications/Clockify.app")
+        if NSWorkspace.shared.open(appURL) { return }
+        openInBrowser()
+    }
+
+    @objc func openInBrowser() {
+        NSWorkspace.shared.open(URL(string: "https://app.clockify.me")!)
+    }
 }
 
 extension AppDelegate: NSMenuDelegate {
