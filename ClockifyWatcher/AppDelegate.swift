@@ -74,7 +74,47 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // Stubs — implemented in Tasks 7 and 8
-    func promptForApiKey(error: String? = nil) {}
+    func promptForApiKey(error: String? = nil) {
+        let alert = NSAlert()
+        alert.messageText = error ?? "Clockify API Key Required"
+        alert.informativeText = "Find your API key in Clockify → Profile Settings → API."
+        alert.addButton(withTitle: "Connect")
+        alert.addButton(withTitle: "Quit")
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        input.placeholderString = "Paste your API key here"
+        alert.accessoryView = input
+        alert.window.initialFirstResponder = input
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            NSApplication.shared.terminate(nil)
+            return
+        }
+
+        let key = input.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !key.isEmpty else {
+            promptForApiKey(error: "API key cannot be empty.")
+            return
+        }
+
+        Task {
+            let tempClient = ClockifyClient(apiKey: key)
+            do {
+                _ = try await tempClient.fetchUser()
+                KeychainHelper.saveApiKey(key)
+                self.client = tempClient
+                await self.initialize()
+            } catch ClockifyError.unauthorized {
+                await MainActor.run {
+                    self.promptForApiKey(error: "Invalid API key. Please try again.")
+                }
+            } catch {
+                await MainActor.run {
+                    self.promptForApiKey(error: "Connection failed. Check your network and try again.")
+                }
+            }
+        }
+    }
     func initialize() async {}
     func buildMenu() -> NSMenu { NSMenu() }
     func refreshProjects() async {}
