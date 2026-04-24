@@ -75,7 +75,7 @@ final class ClockifyClientTests: XCTestCase {
         }
     }
 
-    func testFetchProjectsReturnsSortedByName() async throws {
+    func testFetchProjectsPreservesAPIOrder() async throws {
         let json = """
         [
           {"id":"p1","name":"Zebra","color":"#FF0000","archived":false},

@@ -58,13 +58,13 @@ final class ClockifyClient {
     private let session: URLSessionProtocol
     private let baseURL = URL(string: "https://api.clockify.me/api/v1")!
 
-    private lazy var decoder: JSONDecoder = {
+    private let decoder: JSONDecoder = {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .iso8601
         return d
     }()
 
-    private lazy var encoder: JSONEncoder = {
+    private let encoder: JSONEncoder = {
         let e = JSONEncoder()
         e.dateEncodingStrategy = .iso8601
         return e
