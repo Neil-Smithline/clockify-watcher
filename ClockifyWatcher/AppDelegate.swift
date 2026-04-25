@@ -3,6 +3,7 @@ import AppKit
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var pollTimer: Timer?
+    private var displayTimer: Timer?
 
     var consecutiveFailures = 0
     var cachedProjects: [String: ClockifyProject] = [:]
@@ -142,6 +143,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.poll()
         }
+        displayTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.updateStatusItem()
+        }
     }
 
     func poll() {
@@ -166,6 +170,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } catch ClockifyError.unauthorized {
                 await MainActor.run {
                     self.pollTimer?.invalidate()
+                    self.displayTimer?.invalidate()
                     KeychainHelper.deleteApiKey()
                     self.promptForApiKey(error: "Session expired. Please re-enter your API key.")
                 }
