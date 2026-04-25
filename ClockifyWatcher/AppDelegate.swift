@@ -273,6 +273,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         populateMenu(menu)
+        poll()
         Task { await refreshProjects() }
     }
 }
