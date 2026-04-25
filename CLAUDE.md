@@ -32,10 +32,6 @@ xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw
 xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw-build test
 ```
 
-## Git / sandbox notes
-
-SSH commit signing is blocked by the default sandbox. Use `dangerouslyDisableSandbox: true` for all `git commit`, `git push`, and `xcodebuild` calls.
-
 ## TODO
 
 ### Needs manual testing
