@@ -34,23 +34,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func updateStatusItem() {
         guard let button = statusItem.button else { return }
+        let prefix = consecutiveFailures >= 2 ? "*" : ""
         if let projectId = activeProjectId,
            let project = cachedProjects[projectId],
            let start = activeEntryStart,
            let color = NSColor(hex: project.color) {
-            let prefix = consecutiveFailures >= 2 ? "*" : ""
             let text = "\(prefix)\(formatElapsed(from: start)) \(project.name)"
             let attrs: [NSAttributedString.Key: Any] = [
                 .foregroundColor: color,
                 .font: NSFont.menuBarFont(ofSize: 0)
             ]
             button.attributedTitle = NSAttributedString(string: text, attributes: attrs)
+        } else if let start = activeEntryStart {
+            // Timer running but project not yet in cache — show time without project name
+            button.attributedTitle = NSAttributedString(string: "\(prefix)\(formatElapsed(from: start))")
         } else if consecutiveFailures >= 2 {
             button.attributedTitle = NSAttributedString(string: "*")
         } else {
             button.attributedTitle = NSAttributedString(string: "")
         }
-        // Update checkmarks in the existing menu rather than rebuilding
         updateMenuCheckmarks()
     }
 
@@ -191,6 +193,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func buildMenu() -> NSMenu {
         let menu = NSMenu()
+        populateMenu(menu)
+        return menu
+    }
+
+    private func populateMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
 
         let sortedProjects = cachedProjects.values.sorted { $0.name < $1.name }
         for project in sortedProjects {
@@ -222,7 +230,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Quit",
                                 action: #selector(NSApplication.terminate(_:)),
                                 keyEquivalent: "q"))
-        return menu
     }
 
     @objc func switchProject(_ sender: NSMenuItem) {
@@ -260,6 +267,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
+        populateMenu(menu)
         Task { await refreshProjects() }
     }
 }
