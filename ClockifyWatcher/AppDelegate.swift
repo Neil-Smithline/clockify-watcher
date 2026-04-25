@@ -23,8 +23,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         guard let button = statusItem.button else { return }
-        button.image = NSImage(named: "clockify-logo")
-        button.image?.isTemplate = true
+        let icon = NSImage(systemSymbolName: "clock", accessibilityDescription: "Clockify") ?? NSImage(named: "clockify-logo")
+        icon?.isTemplate = true
+        button.image = icon
         button.imagePosition = .imageLeft
         let menu = buildMenu()
         menu.delegate = self
