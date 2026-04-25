@@ -151,7 +151,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 await MainActor.run { self.noProjectEntryId = nil }
                 poll()
             }
-        } else {
+        } else if response == .alertSecondButtonReturn {
             Task {
                 try? await client.deleteEntry(workspaceId: workspaceId, entryId: entryId)
                 await MainActor.run { self.noProjectEntryId = nil }
