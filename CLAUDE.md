@@ -25,7 +25,7 @@ Key decisions:
 ## Building
 
 ```bash
-# Build (requires sandbox disabled — xcodebuild needs write access outside sandbox)
+# Build
 xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw-build build
 
 # Test
