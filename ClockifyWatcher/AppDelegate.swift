@@ -130,6 +130,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         alert.messageText = "Timer running without a project"
         alert.addButton(withTitle: "Assign Project")
         alert.addButton(withTitle: "Delete Timer")
+        alert.addButton(withTitle: "Cancel")
 
         let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
         let sorted = cachedProjects.values.sorted { $0.name < $1.name }
