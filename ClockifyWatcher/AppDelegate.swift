@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -15,6 +16,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
+        registerSystemEventObservers()
+        registerLoginItem()
         startSession()
     }
 
@@ -30,6 +33,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = buildMenu()
         menu.delegate = self
         statusItem.menu = menu
+    }
+
+    // MARK: - System event handling
+
+    private func registerSystemEventObservers() {
+        let wsCenter = NSWorkspace.shared.notificationCenter
+        wsCenter.addObserver(self, selector: #selector(handleAutoStop),
+                             name: NSWorkspace.willSleepNotification, object: nil)
+        wsCenter.addObserver(self, selector: #selector(handleAutoStop),
+                             name: NSWorkspace.willPowerOffNotification, object: nil)
+        DistributedNotificationCenter.default().addObserver(
+            self, selector: #selector(handleAutoStop),
+            name: NSNotification.Name("com.apple.screenIsLocked"), object: nil)
+    }
+
+    @objc private func handleAutoStop() {
+        stopTimerSync()
+    }
+
+    private func stopTimerSync() {
+        guard let client, let workspaceId, let userId, activeProjectId != nil else { return }
+        let semaphore = DispatchSemaphore(value: 0)
+        Task {
+            try? await client.stopCurrentTimer(workspaceId: workspaceId, userId: userId)
+            await MainActor.run {
+                self.activeProjectId = nil
+                self.activeEntryStart = nil
+                self.updateStatusItem()
+            }
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 8)
+    }
+
+    // MARK: - Login item
+
+    private func registerLoginItem() {
+        if #available(macOS 13.0, *) {
+            try? SMAppService.mainApp.register()
+        }
     }
 
     // MARK: - StatusItem display update
