@@ -287,7 +287,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func openClockifyApp() {
         let candidates = [
+            "/Applications/Clockify Desktop.app",
             "/Applications/Clockify.app",
+            "\(NSHomeDirectory())/Applications/Clockify Desktop.app",
             "\(NSHomeDirectory())/Applications/Clockify.app"
         ]
         for path in candidates {
