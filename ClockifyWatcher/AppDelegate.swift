@@ -13,6 +13,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var workspaceId: String?
     var userId: String?
     var client: ClockifyClient?
+    var lastAutoStoppedProjectId: String?
+
+    private let autoStoppedProjectKey = "lastAutoStoppedProjectId"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
@@ -43,13 +46,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                              name: NSWorkspace.willSleepNotification, object: nil)
         wsCenter.addObserver(self, selector: #selector(handleAutoStop),
                              name: NSWorkspace.willPowerOffNotification, object: nil)
-        DistributedNotificationCenter.default().addObserver(
-            self, selector: #selector(handleAutoStop),
-            name: NSNotification.Name("com.apple.screenIsLocked"), object: nil)
+        let dnc = DistributedNotificationCenter.default()
+        dnc.addObserver(self, selector: #selector(handleAutoStop),
+                        name: NSNotification.Name("com.apple.screenIsLocked"), object: nil)
+        dnc.addObserver(self, selector: #selector(handleScreenUnlock),
+                        name: NSNotification.Name("com.apple.screenIsUnlocked"), object: nil)
     }
 
     @objc private func handleAutoStop() {
+        let stoppedProjectId = activeProjectId
         stopTimerSync()
+        if let projectId = stoppedProjectId {
+            lastAutoStoppedProjectId = projectId
+            UserDefaults.standard.set(projectId, forKey: autoStoppedProjectKey)
+        }
+    }
+
+    @objc private func handleScreenUnlock() {
+        guard activeProjectId == nil, lastAutoStoppedProjectId != nil else { return }
+        showResumeDialog()
     }
 
     private func stopTimerSync() {
@@ -57,14 +72,53 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let semaphore = DispatchSemaphore(value: 0)
         Task {
             try? await client.stopCurrentTimer(workspaceId: workspaceId, userId: userId)
-            await MainActor.run {
-                self.activeProjectId = nil
-                self.activeEntryStart = nil
-                self.updateStatusItem()
-            }
             semaphore.signal()
         }
         _ = semaphore.wait(timeout: .now() + 8)
+        DispatchQueue.main.async {
+            self.activeProjectId = nil
+            self.activeEntryStart = nil
+            self.updateStatusItem()
+        }
+    }
+
+    // MARK: - Resume dialog
+
+    private func clearAutoStoppedProject() {
+        lastAutoStoppedProjectId = nil
+        UserDefaults.standard.removeObject(forKey: autoStoppedProjectKey)
+    }
+
+    private func showResumeDialog() {
+        guard lastAutoStoppedProjectId != nil, !cachedProjects.isEmpty else {
+            clearAutoStoppedProject()
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Timer was automatically stopped"
+        alert.addButton(withTitle: "Start Timer")
+        alert.addButton(withTitle: "Dismiss")
+
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
+        let sorted = cachedProjects.values.sorted { $0.name < $1.name }
+        for project in sorted {
+            popup.addItem(withTitle: project.name)
+            popup.lastItem?.representedObject = project.id
+        }
+        if let idx = sorted.firstIndex(where: { $0.id == lastAutoStoppedProjectId }) {
+            popup.selectItem(at: idx)
+        }
+        alert.accessoryView = popup
+
+        clearAutoStoppedProject()
+
+        guard alert.runModal() == .alertFirstButtonReturn,
+              let selectedId = popup.selectedItem?.representedObject as? String,
+              let client, let workspaceId else { return }
+        Task {
+            try? await client.startTimer(workspaceId: workspaceId, projectId: selectedId)
+            poll()
+        }
     }
 
     // MARK: - Login item
@@ -170,6 +224,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             workspaceId = user.activeWorkspace
             let projects = try await client.fetchProjects(workspaceId: user.activeWorkspace)
             cachedProjects = Dictionary(uniqueKeysWithValues: projects.map { ($0.id, $0) })
+            if let saved = UserDefaults.standard.string(forKey: autoStoppedProjectKey) {
+                UserDefaults.standard.removeObject(forKey: autoStoppedProjectKey)
+                let entry = try? await client.fetchRunningEntry(workspaceId: user.activeWorkspace, userId: user.id)
+                if entry?.projectId == nil {
+                    await MainActor.run { self.lastAutoStoppedProjectId = saved }
+                }
+            }
         } catch ClockifyError.unauthorized {
             await MainActor.run {
                 KeychainHelper.deleteApiKey()
@@ -179,7 +240,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             // Network error on launch — will retry on next poll
         }
-        await MainActor.run { startPolling() }
+        await MainActor.run {
+            startPolling()
+            if lastAutoStoppedProjectId != nil { showResumeDialog() }
+        }
     }
 
     private func startPolling() {
