@@ -14,6 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var userId: String?
     var client: ClockifyClient?
     var lastAutoStoppedProjectId: String?
+    var noProjectEntryId: String?
 
     private let autoStoppedProjectKey = "lastAutoStoppedProjectId"
 
@@ -119,6 +120,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             try? await client.startTimer(workspaceId: workspaceId, projectId: selectedId)
             poll()
+        }
+    }
+
+    private func showNoProjectDialog(entryId: String, start: Date) {
+        guard !cachedProjects.isEmpty, let client, let workspaceId else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Timer running without a project"
+        alert.addButton(withTitle: "Assign Project")
+        alert.addButton(withTitle: "Delete Timer")
+
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
+        let sorted = cachedProjects.values.sorted { $0.name < $1.name }
+        for project in sorted {
+            popup.addItem(withTitle: project.name)
+            popup.lastItem?.representedObject = project.id
+        }
+        alert.accessoryView = popup
+
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+
+        if response == .alertFirstButtonReturn,
+           let selectedId = popup.selectedItem?.representedObject as? String {
+            Task {
+                try? await client.updateEntryProject(workspaceId: workspaceId, entryId: entryId,
+                                                     start: start, projectId: selectedId)
+                await MainActor.run { self.noProjectEntryId = nil }
+                poll()
+            }
+        } else {
+            Task {
+                try? await client.deleteEntry(workspaceId: workspaceId, entryId: entryId)
+                await MainActor.run { self.noProjectEntryId = nil }
+                poll()
+            }
         }
     }
 
@@ -264,15 +301,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 let entry = try await client.fetchRunningEntry(workspaceId: workspaceId, userId: userId)
                 await MainActor.run {
                     self.consecutiveFailures = 0
-                    if let entry, let projectId = entry.projectId {
-                        self.activeProjectId = projectId
-                        self.activeEntryStart = entry.timeInterval.start
-                        if self.cachedProjects[projectId] == nil {
-                            Task { await self.refreshProjects() }
+                    if let entry {
+                        if let projectId = entry.projectId {
+                            self.activeProjectId = projectId
+                            self.activeEntryStart = entry.timeInterval.start
+                            self.noProjectEntryId = nil
+                            if self.cachedProjects[projectId] == nil {
+                                Task { await self.refreshProjects() }
+                            }
+                        } else if entry.id != self.noProjectEntryId {
+                            self.activeProjectId = nil
+                            self.activeEntryStart = nil
+                            self.noProjectEntryId = entry.id
+                            self.showNoProjectDialog(entryId: entry.id, start: entry.timeInterval.start)
                         }
                     } else {
                         self.activeProjectId = nil
                         self.activeEntryStart = nil
+                        self.noProjectEntryId = nil
                     }
                     self.updateStatusItem()
                 }

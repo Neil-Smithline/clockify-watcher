@@ -36,6 +36,11 @@ struct StartTimerBody: Encodable {
     let projectId: String
 }
 
+struct UpdateEntryBody: Encodable {
+    let start: Date
+    let projectId: String
+}
+
 // MARK: - Errors
 
 enum ClockifyError: Error {
@@ -108,6 +113,16 @@ final class ClockifyClient {
         try await post(url: url, body: StartTimerBody(start: Date(), projectId: projectId))
     }
 
+    func updateEntryProject(workspaceId: String, entryId: String, start: Date, projectId: String) async throws {
+        let url = baseURL.appendingPathComponent("workspaces/\(workspaceId)/time-entries/\(entryId)")
+        try await put(url: url, body: UpdateEntryBody(start: start, projectId: projectId))
+    }
+
+    func deleteEntry(workspaceId: String, entryId: String) async throws {
+        let url = baseURL.appendingPathComponent("workspaces/\(workspaceId)/time-entries/\(entryId)")
+        try await delete(url: url)
+    }
+
     // MARK: - Helpers
 
     private func get<T: Decodable>(url: URL) async throws -> T {
@@ -134,6 +149,24 @@ final class ClockifyClient {
         req.setValue(apiKey, forHTTPHeaderField: "X-Api-Key")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try encoder.encode(body)
+        let (_, response) = try await session.data(for: req)
+        try checkResponse(response)
+    }
+
+    private func put<B: Encodable>(url: URL, body: B) async throws {
+        var req = URLRequest(url: url)
+        req.httpMethod = "PUT"
+        req.setValue(apiKey, forHTTPHeaderField: "X-Api-Key")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try encoder.encode(body)
+        let (_, response) = try await session.data(for: req)
+        try checkResponse(response)
+    }
+
+    private func delete(url: URL) async throws {
+        var req = URLRequest(url: url)
+        req.httpMethod = "DELETE"
+        req.setValue(apiKey, forHTTPHeaderField: "X-Api-Key")
         let (_, response) = try await session.data(for: req)
         try checkResponse(response)
     }
