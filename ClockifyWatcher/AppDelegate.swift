@@ -112,6 +112,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         clearAutoStoppedProject()
 
+        NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn,
               let selectedId = popup.selectedItem?.representedObject as? String,
               let client, let workspaceId else { return }
