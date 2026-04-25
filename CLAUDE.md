@@ -42,4 +42,4 @@ xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw
 - [x] Resume dialog: on screen unlock or app launch after auto-stop, shows project picker — verify pre-selection, Start Timer, and Dismiss
 
 ### Features / improvements
-- [ ] Handle entries with no project (currently shows time only, no project name)
+- [x] Handle entries with no project — prompts to assign a project or delete the entry
