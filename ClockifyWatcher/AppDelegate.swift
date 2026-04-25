@@ -286,8 +286,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func openClockifyApp() {
-        let appURL = URL(fileURLWithPath: "/Applications/Clockify.app")
-        if NSWorkspace.shared.open(appURL) { return }
+        let candidates = [
+            "/Applications/Clockify.app",
+            "\(NSHomeDirectory())/Applications/Clockify.app"
+        ]
+        for path in candidates {
+            if FileManager.default.fileExists(atPath: path) {
+                NSWorkspace.shared.openApplication(
+                    at: URL(fileURLWithPath: path),
+                    configuration: NSWorkspace.OpenConfiguration(),
+                    completionHandler: nil)
+                return
+            }
+        }
         openInBrowser()
     }
 
