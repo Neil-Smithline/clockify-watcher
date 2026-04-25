@@ -216,6 +216,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(item)
         }
 
+        if activeProjectId != nil {
+            let stopItem = NSMenuItem(title: "Stop Timer",
+                                      action: #selector(stopTimer),
+                                      keyEquivalent: "")
+            stopItem.target = self
+            menu.addItem(stopItem)
+        }
+
         menu.addItem(.separator())
 
         let openApp = NSMenuItem(title: "Open Clockify App",
@@ -252,6 +260,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 await MainActor.run {
                     let alert = NSAlert()
                     alert.messageText = "Failed to switch project"
+                    alert.informativeText = error.localizedDescription
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    @objc func stopTimer() {
+        guard let client, let workspaceId, let userId else { return }
+        Task {
+            do {
+                try await client.stopCurrentTimer(workspaceId: workspaceId, userId: userId)
+                poll()
+            } catch {
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "Failed to stop timer"
                     alert.informativeText = error.localizedDescription
                     alert.runModal()
                 }
