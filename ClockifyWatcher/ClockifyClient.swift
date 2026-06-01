@@ -34,11 +34,13 @@ struct StopTimerBody: Encodable {
 struct StartTimerBody: Encodable {
     let start: Date
     let projectId: String
+    let billable: Bool = true
 }
 
 struct UpdateEntryBody: Encodable {
     let start: Date
     let projectId: String
+    let billable: Bool = true
 }
 
 // MARK: - Errors
