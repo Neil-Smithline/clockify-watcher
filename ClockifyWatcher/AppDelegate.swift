@@ -8,8 +8,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     var consecutiveFailures = 0
     var cachedProjects: [String: ClockifyProject] = [:]
-    var activeProjectId: String?
-    var activeEntryStart: Date?
+    /// The running entry, cached from the last poll. Non-nil only when it has a project.
+    var activeEntry: ClockifyTimeEntry?
+    var activeProjectId: String? { activeEntry?.projectId }
+    var activeEntryStart: Date? { activeEntry?.timeInterval.start }
     var workspaceId: String?
     var userId: String?
     var client: ClockifyClient?
@@ -77,8 +79,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         _ = semaphore.wait(timeout: .now() + 8)
         DispatchQueue.main.async {
-            self.activeProjectId = nil
-            self.activeEntryStart = nil
+            self.activeEntry = nil
             self.updateStatusItem()
         }
     }
@@ -123,7 +124,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showNoProjectDialog(entryId: String, start: Date) {
+    private func showNoProjectDialog(entry: ClockifyTimeEntry) {
+        let entryId = entry.id
         guard !cachedProjects.isEmpty, let client, let workspaceId else { return }
 
         let alert = NSAlert()
@@ -147,8 +149,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
            let selectedId = popup.selectedItem?.representedObject as? String {
             Task {
                 try? await client.updateEntry(workspaceId: workspaceId, entryId: entryId,
-                                              start: start, projectId: selectedId,
-                                              description: nil, taskId: nil, tagIds: nil)
+                                              start: entry.timeInterval.start,
+                                              projectId: selectedId,
+                                              description: entry.description,
+                                              taskId: entry.taskId, tagIds: entry.tagIds)
                 await MainActor.run { self.noProjectEntryId = nil }
                 poll()
             }
@@ -305,21 +309,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self.consecutiveFailures = 0
                     if let entry {
                         if let projectId = entry.projectId {
-                            self.activeProjectId = projectId
-                            self.activeEntryStart = entry.timeInterval.start
+                            self.activeEntry = entry
                             self.noProjectEntryId = nil
                             if self.cachedProjects[projectId] == nil {
                                 Task { await self.refreshProjects() }
                             }
                         } else if entry.id != self.noProjectEntryId {
-                            self.activeProjectId = nil
-                            self.activeEntryStart = nil
+                            self.activeEntry = nil
                             self.noProjectEntryId = entry.id
-                            self.showNoProjectDialog(entryId: entry.id, start: entry.timeInterval.start)
+                            self.showNoProjectDialog(entry: entry)
                         }
                     } else {
-                        self.activeProjectId = nil
-                        self.activeEntryStart = nil
+                        self.activeEntry = nil
                         self.noProjectEntryId = nil
                     }
                     self.updateStatusItem()
