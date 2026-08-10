@@ -146,8 +146,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if response == .alertFirstButtonReturn,
            let selectedId = popup.selectedItem?.representedObject as? String {
             Task {
-                try? await client.updateEntryProject(workspaceId: workspaceId, entryId: entryId,
-                                                     start: start, projectId: selectedId)
+                try? await client.updateEntry(workspaceId: workspaceId, entryId: entryId,
+                                              start: start, projectId: selectedId,
+                                              description: nil, taskId: nil, tagIds: nil)
                 await MainActor.run { self.noProjectEntryId = nil }
                 poll()
             }

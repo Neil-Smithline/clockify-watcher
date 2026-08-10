@@ -53,6 +53,42 @@ final class ClockifyClientTests: XCTestCase {
         XCTAssertNil(entry.projectId)
     }
 
+    func testDecodeTimeEntryPreservesDescriptionTaskAndTags() throws {
+        let json = """
+        {
+          "id":"entry3",
+          "projectId":"proj1",
+          "description":"writing docs",
+          "taskId":"task1",
+          "tagIds":["tag1","tag2"],
+          "timeInterval":{"start":"2024-01-01T10:00:00Z","end":null,"duration":null}
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let entry = try decoder.decode(ClockifyTimeEntry.self, from: json)
+        XCTAssertEqual(entry.description, "writing docs")
+        XCTAssertEqual(entry.taskId, "task1")
+        XCTAssertEqual(entry.tagIds, ["tag1", "tag2"])
+    }
+
+    func testDecodeTimeEntryWithoutOptionalFields() throws {
+        // The polling response may omit these keys entirely; decoding must still work.
+        let json = """
+        {
+          "id":"entry4",
+          "projectId":"proj1",
+          "timeInterval":{"start":"2024-01-01T10:00:00Z","end":null,"duration":null}
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let entry = try decoder.decode(ClockifyTimeEntry.self, from: json)
+        XCTAssertNil(entry.description)
+        XCTAssertNil(entry.taskId)
+        XCTAssertNil(entry.tagIds)
+    }
+
     // MARK: - Networking
 
     func testFetchUserSuccess() async throws {
@@ -103,6 +139,32 @@ final class ClockifyClientTests: XCTestCase {
         XCTAssertEqual(entry?.id, "e1")
         XCTAssertEqual(entry?.projectId, "p1")
     }
+
+    func testUpdateEntrySendsPreservedFieldsAndNoEnd() async throws {
+        let session = RecordingURLSession()
+        let client = ClockifyClient(apiKey: "key", session: session)
+
+        try await client.updateEntry(workspaceId: "ws1", entryId: "e1",
+                                     start: Date(timeIntervalSince1970: 1_700_000_000),
+                                     projectId: "p1",
+                                     description: "writing docs",
+                                     taskId: "task1",
+                                     tagIds: ["tag1", "tag2"])
+
+        let request = try XCTUnwrap(session.lastRequest)
+        XCTAssertEqual(request.httpMethod, "PUT")
+        XCTAssertEqual(request.url?.path, "/api/v1/workspaces/ws1/time-entries/e1")
+
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(request.httpBody)) as? [String: Any])
+        XCTAssertEqual(body["projectId"] as? String, "p1")
+        XCTAssertEqual(body["description"] as? String, "writing docs")
+        XCTAssertEqual(body["taskId"] as? String, "task1")
+        XCTAssertEqual(body["tagIds"] as? [String], ["tag1", "tag2"])
+        XCTAssertEqual(body["billable"] as? Bool, true)
+        XCTAssertNotNil(body["start"])
+        XCTAssertNil(body["end"], "A running entry must not be given an end time")
+    }
 }
 
 // MARK: - Test helpers
@@ -112,6 +174,26 @@ struct MockURLSession: URLSessionProtocol {
     let statusCode: Int
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        let url = request.url ?? URL(string: "https://example.com")!
+        let response = HTTPURLResponse(url: url, statusCode: statusCode,
+                                       httpVersion: nil, headerFields: nil)!
+        return (data, response)
+    }
+}
+
+/// Captures the last request so tests can assert on method, URL, and body.
+final class RecordingURLSession: URLSessionProtocol, @unchecked Sendable {
+    private(set) var lastRequest: URLRequest?
+    let data: Data
+    let statusCode: Int
+
+    init(data: Data = Data(), statusCode: Int = 200) {
+        self.data = data
+        self.statusCode = statusCode
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        lastRequest = request
         let url = request.url ?? URL(string: "https://example.com")!
         let response = HTTPURLResponse(url: url, statusCode: statusCode,
                                        httpVersion: nil, headerFields: nil)!
