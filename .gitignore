@@ -1,0 +1,5 @@
+# Isolated worktrees created for feature work
+.claude/worktrees/
+
+# Superpowers subagent-driven-development scratch (ledgers, briefs, review packages)
+.superpowers/
