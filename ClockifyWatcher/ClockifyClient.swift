@@ -17,6 +17,9 @@ struct ClockifyProject: Decodable {
 struct ClockifyTimeEntry: Decodable {
     let id: String
     let projectId: String?
+    let description: String?
+    let taskId: String?
+    let tagIds: [String]?
     let timeInterval: ClockifyTimeInterval
 }
 
@@ -40,6 +43,9 @@ struct StartTimerBody: Encodable {
 struct UpdateEntryBody: Encodable {
     let start: Date
     let projectId: String
+    let description: String?
+    let taskId: String?
+    let tagIds: [String]?
     let billable: Bool = true
 }
 
@@ -115,9 +121,12 @@ final class ClockifyClient {
         try await post(url: url, body: StartTimerBody(start: Date(), projectId: projectId))
     }
 
-    func updateEntryProject(workspaceId: String, entryId: String, start: Date, projectId: String) async throws {
+    func updateEntry(workspaceId: String, entryId: String, start: Date, projectId: String,
+                     description: String?, taskId: String?, tagIds: [String]?) async throws {
         let url = baseURL.appendingPathComponent("workspaces/\(workspaceId)/time-entries/\(entryId)")
-        try await put(url: url, body: UpdateEntryBody(start: start, projectId: projectId))
+        try await put(url: url, body: UpdateEntryBody(start: start, projectId: projectId,
+                                                      description: description,
+                                                      taskId: taskId, tagIds: tagIds))
     }
 
     func deleteEntry(workspaceId: String, entryId: String) async throws {

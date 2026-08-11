@@ -8,8 +8,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     var consecutiveFailures = 0
     var cachedProjects: [String: ClockifyProject] = [:]
-    var activeProjectId: String?
-    var activeEntryStart: Date?
+    /// The running entry, cached from the last poll. Non-nil only when it has a project.
+    var activeEntry: ClockifyTimeEntry?
+    var activeProjectId: String? { activeEntry?.projectId }
+    var activeEntryStart: Date? { activeEntry?.timeInterval.start }
     var workspaceId: String?
     var userId: String?
     var client: ClockifyClient?
@@ -77,8 +79,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         _ = semaphore.wait(timeout: .now() + 8)
         DispatchQueue.main.async {
-            self.activeProjectId = nil
-            self.activeEntryStart = nil
+            self.activeEntry = nil
             self.updateStatusItem()
         }
     }
@@ -123,7 +124,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showNoProjectDialog(entryId: String, start: Date) {
+    private func showNoProjectDialog(entry: ClockifyTimeEntry) {
+        let entryId = entry.id
         guard !cachedProjects.isEmpty, let client, let workspaceId else { return }
 
         let alert = NSAlert()
@@ -146,8 +148,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if response == .alertFirstButtonReturn,
            let selectedId = popup.selectedItem?.representedObject as? String {
             Task {
-                try? await client.updateEntryProject(workspaceId: workspaceId, entryId: entryId,
-                                                     start: start, projectId: selectedId)
+                try? await client.updateEntry(workspaceId: workspaceId, entryId: entryId,
+                                              start: entry.timeInterval.start,
+                                              projectId: selectedId,
+                                              description: entry.description,
+                                              taskId: entry.taskId, tagIds: entry.tagIds)
                 await MainActor.run { self.noProjectEntryId = nil }
                 poll()
             }
@@ -156,6 +161,88 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await client.deleteEntry(workspaceId: workspaceId, entryId: entryId)
                 await MainActor.run { self.noProjectEntryId = nil }
                 poll()
+            }
+        }
+    }
+
+    /// Shows the start-time editor for the running entry.
+    /// - Parameters:
+    ///   - error: message text for a re-show after a rejected value; `nil` on first open.
+    ///   - prefill: the rejected value to restore into the picker; `nil` uses the current start.
+    private func showEditStartTimeDialog(error: String? = nil, prefill: Date? = nil) {
+        guard let entry = activeEntry,
+              let projectId = entry.projectId,
+              let client, let workspaceId else { return }
+        let currentStart = entry.timeInterval.start
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        let currentStartText = formatter.string(from: currentStart)
+
+        let alert = NSAlert()
+        if let error {
+            alert.messageText = error
+            alert.informativeText =
+                "The timer started at \(currentStartText). Pick a time at or before that."
+        } else {
+            alert.messageText = "Edit start time"
+            let projectName = cachedProjects[projectId]?.name ?? "Timer"
+            alert.informativeText = "\(projectName) — started \(currentStartText)"
+        }
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        let picker = NSDatePicker(frame: NSRect(x: 0, y: 0, width: 150, height: 26))
+        picker.datePickerStyle = .textFieldAndStepper
+        picker.datePickerElements = .hourMinute
+        picker.dateValue = prefill ?? currentStart
+
+        let label = NSTextField(labelWithString: "Timer started at:")
+        label.isEditable = false
+        label.isBordered = false
+        label.drawsBackground = false
+
+        let stack = NSStackView(views: [label, picker])
+        stack.orientation = .horizontal
+        stack.frame = NSRect(x: 0, y: 0, width: 300, height: 26)
+        alert.accessoryView = stack
+        alert.window.initialFirstResponder = picker
+
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        guard let freshEntry = activeEntry, freshEntry.id == entry.id,
+              let freshProjectId = freshEntry.projectId else {
+            let stale = NSAlert()
+            stale.messageText = "Timer is no longer running"
+            stale.informativeText =
+                "The running timer changed while the dialog was open, so the start time was not updated."
+            stale.runModal()
+            return
+        }
+
+        switch resolveStartTime(picked: picker.dateValue,
+                                currentStart: freshEntry.timeInterval.start, now: Date()) {
+        case .failure:
+            showEditStartTimeDialog(error: "Start time can only be moved earlier",
+                                    prefill: picker.dateValue)
+        case .success(let newStart):
+            Task {
+                do {
+                    try await client.updateEntry(workspaceId: workspaceId, entryId: freshEntry.id,
+                                                 start: newStart, projectId: freshProjectId,
+                                                 description: freshEntry.description,
+                                                 taskId: freshEntry.taskId, tagIds: freshEntry.tagIds)
+                    poll()
+                } catch {
+                    await MainActor.run {
+                        let failure = NSAlert()
+                        failure.messageText = "Failed to update start time"
+                        failure.informativeText = error.localizedDescription
+                        failure.runModal()
+                    }
+                }
             }
         }
     }
@@ -304,21 +391,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self.consecutiveFailures = 0
                     if let entry {
                         if let projectId = entry.projectId {
-                            self.activeProjectId = projectId
-                            self.activeEntryStart = entry.timeInterval.start
+                            self.activeEntry = entry
                             self.noProjectEntryId = nil
                             if self.cachedProjects[projectId] == nil {
                                 Task { await self.refreshProjects() }
                             }
                         } else if entry.id != self.noProjectEntryId {
-                            self.activeProjectId = nil
-                            self.activeEntryStart = nil
+                            self.activeEntry = nil
                             self.noProjectEntryId = entry.id
-                            self.showNoProjectDialog(entryId: entry.id, start: entry.timeInterval.start)
+                            self.showNoProjectDialog(entry: entry)
                         }
                     } else {
-                        self.activeProjectId = nil
-                        self.activeEntryStart = nil
+                        self.activeEntry = nil
                         self.noProjectEntryId = nil
                     }
                     self.updateStatusItem()
@@ -373,6 +457,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if activeProjectId != nil {
+            let editItem = NSMenuItem(title: "Edit Start Time…",
+                                      action: #selector(editStartTime),
+                                      keyEquivalent: "")
+            editItem.target = self
+            menu.addItem(editItem)
+
             let stopItem = NSMenuItem(title: "Stop Timer",
                                       action: #selector(stopTimer),
                                       keyEquivalent: "")
@@ -421,6 +511,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    @objc func editStartTime() {
+        showEditStartTimeDialog()
     }
 
     @objc func stopTimer() {
