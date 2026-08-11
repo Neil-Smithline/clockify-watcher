@@ -165,6 +165,68 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Shows the start-time editor for the running entry.
+    /// - Parameters:
+    ///   - error: message text for a re-show after a rejected value; `nil` on first open.
+    ///   - prefill: the rejected value to restore into the picker; `nil` uses the current start.
+    private func showEditStartTimeDialog(error: String? = nil, prefill: Date? = nil) {
+        guard let entry = activeEntry,
+              let projectId = entry.projectId,
+              let client, let workspaceId else { return }
+        let currentStart = entry.timeInterval.start
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        let currentStartText = formatter.string(from: currentStart)
+
+        let alert = NSAlert()
+        if let error {
+            alert.messageText = error
+            alert.informativeText =
+                "The timer started at \(currentStartText). Pick a time at or before that."
+        } else {
+            alert.messageText = "Edit start time"
+            let projectName = cachedProjects[projectId]?.name ?? "Timer"
+            alert.informativeText = "\(projectName) — started \(currentStartText)"
+        }
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        let picker = NSDatePicker(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
+        picker.datePickerStyle = .textFieldAndStepper
+        picker.datePickerElements = .hourMinute
+        picker.dateValue = prefill ?? currentStart
+        alert.accessoryView = picker
+        alert.window.initialFirstResponder = picker
+
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        switch resolveStartTime(picked: picker.dateValue, currentStart: currentStart, now: Date()) {
+        case .failure:
+            showEditStartTimeDialog(error: "Start time can only be moved earlier",
+                                    prefill: picker.dateValue)
+        case .success(let newStart):
+            Task {
+                do {
+                    try await client.updateEntry(workspaceId: workspaceId, entryId: entry.id,
+                                                 start: newStart, projectId: projectId,
+                                                 description: entry.description,
+                                                 taskId: entry.taskId, tagIds: entry.tagIds)
+                    poll()
+                } catch {
+                    await MainActor.run {
+                        let failure = NSAlert()
+                        failure.messageText = "Failed to update start time"
+                        failure.informativeText = error.localizedDescription
+                        failure.runModal()
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Login item
 
     private func registerLoginItem() {
@@ -375,6 +437,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if activeProjectId != nil {
+            let editItem = NSMenuItem(title: "Edit Start Time…",
+                                      action: #selector(editStartTime),
+                                      keyEquivalent: "")
+            editItem.target = self
+            menu.addItem(editItem)
+
             let stopItem = NSMenuItem(title: "Stop Timer",
                                       action: #selector(stopTimer),
                                       keyEquivalent: "")
@@ -423,6 +491,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    @objc func editStartTime() {
+        showEditStartTimeDialog()
     }
 
     @objc func stopTimer() {
