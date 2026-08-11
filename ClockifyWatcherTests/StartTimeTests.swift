@@ -42,6 +42,16 @@ final class StartTimeTests: XCTestCase {
         XCTAssertEqual(result, .success(currentStart))
     }
 
+    func testPickingTheDisplayedMinuteTrimsSecondsFromTheCurrentStart() {
+        // Real Clockify starts carry seconds; picking the minute the picker displays
+        // for the current start is a success that trims those seconds away.
+        let result = resolveStartTime(picked: date(2026, 8, 10, 10, 0),
+                                      currentStart: date(2026, 8, 10, 10, 0, 37),
+                                      now: date(2026, 8, 10, 14, 0),
+                                      calendar: cal)
+        XCTAssertEqual(result, .success(date(2026, 8, 10, 10, 0, 0)))
+    }
+
     func testLaterThanCurrentStartFails() {
         let result = resolveStartTime(picked: date(2026, 8, 10, 10, 45),
                                       currentStart: date(2026, 8, 10, 10, 0),

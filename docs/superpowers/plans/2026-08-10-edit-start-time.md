@@ -56,7 +56,7 @@ build.
 
   Task 4 calls `resolveStartTime` and switches on the `Result`.
 
-- [ ] **Step 1: Register the new files in `project.pbxproj`**
+- [x] **Step 1: Register the new files in `project.pbxproj`**
 
 Five separate edits. Each new line copies the indentation (tabs) of the line above it.
 
@@ -98,7 +98,7 @@ and in `AA0000000000000000000803 /* Sources */` (the test target), after `DD0000
 				FF0000000000000000000002 /* StartTimeTests.swift in Sources */,
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `ClockifyWatcherTests/StartTimeTests.swift`:
 
@@ -167,7 +167,7 @@ final class StartTimeTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 ```bash
 xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw-build \
@@ -179,7 +179,7 @@ Expected: compile failure — `cannot find 'resolveStartTime' in scope`.
 If instead you get "Build input file cannot be found: StartTimeTests.swift", Step 1's
 pbxproj edits are wrong; fix those before continuing.
 
-- [ ] **Step 4: Write the implementation**
+- [x] **Step 4: Write the implementation**
 
 Create `ClockifyWatcher/StartTime.swift`:
 
@@ -216,7 +216,7 @@ func resolveStartTime(picked: Date,
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 ```bash
 xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw-build \
@@ -225,7 +225,7 @@ xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw
 
 Expected: `** TEST SUCCEEDED **`, 5 tests passing.
 
-- [ ] **Step 6: Run the full suite to confirm nothing regressed**
+- [x] **Step 6: Run the full suite to confirm nothing regressed**
 
 ```bash
 xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw-build test
@@ -233,7 +233,7 @@ xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw
 
 Expected: `** TEST SUCCEEDED **`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add ClockifyWatcher/StartTime.swift ClockifyWatcherTests/StartTimeTests.swift \
@@ -262,7 +262,7 @@ fixes that, which also repairs the existing no-project flow.
 
   Tasks 3 and 4 both call `updateEntry`. Task 3 reads the three new model fields.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `ClockifyWatcherTests/ClockifyClientTests.swift`, add these two decoding tests
 immediately after `testDecodeTimeEntryWithNullProjectId`:
@@ -362,7 +362,7 @@ final class RecordingURLSession: URLSessionProtocol, @unchecked Sendable {
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw-build \
@@ -372,7 +372,7 @@ xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw
 Expected: compile failure — `value of type 'ClockifyTimeEntry' has no member 'taskId'`
 and `value of type 'ClockifyClient' has no member 'updateEntry'`.
 
-- [ ] **Step 3: Extend the models**
+- [x] **Step 3: Extend the models**
 
 In `ClockifyWatcher/ClockifyClient.swift`, replace `ClockifyTimeEntry`:
 
@@ -404,7 +404,7 @@ struct UpdateEntryBody: Encodable {
 it — the call site does not pass it. `JSONEncoder` omits `nil` optionals, so an entry
 with no description sends no `description` key, and `end` is never sent at all.
 
-- [ ] **Step 4: Replace `updateEntryProject` with `updateEntry`**
+- [x] **Step 4: Replace `updateEntryProject` with `updateEntry`**
 
 In the same file, replace the `updateEntryProject` method:
 
@@ -428,7 +428,7 @@ properly:
                                               description: nil, taskId: nil, tagIds: nil)
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 ```bash
 xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw-build test
@@ -436,7 +436,7 @@ xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw
 
 Expected: `** TEST SUCCEEDED **`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add ClockifyWatcher/ClockifyClient.swift ClockifyWatcher/AppDelegate.swift \
@@ -471,7 +471,7 @@ There are no new tests here: `AppDelegate` has no test coverage in this project,
 the refactor is behavior-preserving. The gate is that the build succeeds and the
 existing suite still passes.
 
-- [ ] **Step 1: Replace the two stored properties with the cached entry**
+- [x] **Step 1: Replace the two stored properties with the cached entry**
 
 In `ClockifyWatcher/AppDelegate.swift`, replace these two lines:
 
@@ -489,7 +489,7 @@ with:
     var activeEntryStart: Date? { activeEntry?.timeInterval.start }
 ```
 
-- [ ] **Step 2: Update the two assignment sites**
+- [x] **Step 2: Update the two assignment sites**
 
 In `stopTimerSync`, replace:
 
@@ -534,7 +534,7 @@ In `poll`, replace the whole `if let entry { ... } else { ... }` block with:
 Note the `else if` branch no longer clears `activeEntry` twice, and the third branch
 drops the now-nonexistent `activeEntryStart = nil`.
 
-- [ ] **Step 3: Make the no-project dialog preserve the entry's fields**
+- [x] **Step 3: Make the no-project dialog preserve the entry's fields**
 
 Change the signature and body of `showNoProjectDialog`. Replace:
 
@@ -562,7 +562,7 @@ and replace the provisional call added in Task 2 with one that echoes the real v
 The `start:` argument replaces the removed `start` parameter, so the old
 `start: start` no longer compiles — that is the intended change.
 
-- [ ] **Step 4: Build and run the full suite**
+- [x] **Step 4: Build and run the full suite**
 
 ```bash
 xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw-build test
@@ -573,7 +573,7 @@ Expected: `** TEST SUCCEEDED **`. If the compiler reports "cannot assign to prop
 with `grep -n "activeProjectId =\|activeEntryStart =" ClockifyWatcher/AppDelegate.swift`
 and convert it to assign `activeEntry` instead.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ClockifyWatcher/AppDelegate.swift
@@ -596,7 +596,7 @@ git commit -m "refactor: cache the running time entry instead of two derived fie
 As in Task 3, the deliverable is UI code with no automated coverage. The gate is a
 clean build, a green suite, and the manual check in Step 5.
 
-- [ ] **Step 1: Add the menu item**
+- [x] **Step 1: Add the menu item**
 
 In `populateMenu`, replace the `if activeProjectId != nil { ... }` block with:
 
@@ -624,7 +624,7 @@ Then add the action method immediately above `@objc func stopTimer()`:
     }
 ```
 
-- [ ] **Step 2: Add the dialog**
+- [x] **Step 2: Add the dialog**
 
 Add this method to the `// MARK: - Resume dialog` section, immediately after
 `showNoProjectDialog`:
@@ -697,7 +697,7 @@ Add this method to the `// MARK: - Resume dialog` section, immediately after
 is second and picks up `Escape`. This matches the button ordering in
 `showNoProjectDialog` and `promptForApiKey`.
 
-- [ ] **Step 3: Build and run the full suite**
+- [x] **Step 3: Build and run the full suite**
 
 ```bash
 xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw-build test
@@ -705,7 +705,7 @@ xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw
 
 Expected: `** TEST SUCCEEDED **`.
 
-- [ ] **Step 4: Update `CLAUDE.md`**
+- [x] **Step 4: Update `CLAUDE.md`**
 
 Add a row to the file table, after the `Formatting.swift` row:
 
@@ -750,7 +750,7 @@ With a timer running, open the menubar menu and confirm:
 
 Quit the app when done.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add ClockifyWatcher/AppDelegate.swift CLAUDE.md

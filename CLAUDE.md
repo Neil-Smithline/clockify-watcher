@@ -41,7 +41,7 @@ xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw
 - [x] Stop timer on power off (`NSWorkspace.willPowerOffNotification`) — note: OS gives ~8 s; slow networks may not finish in time
 - [x] Login item: install app to `/Applications`, reboot, verify it launches at login (requires macOS 13+)
 - [x] Resume dialog: on screen unlock or app launch after auto-stop, shows project picker — verify pre-selection, Start Timer, and Dismiss
-- [ ] Edit Start Time dialog: pre-fill, saving an earlier time, rejection of a later time, Cancel
+- [ ] Edit Start Time dialog: pre-fill, saving an earlier time, rejection of a later time, Cancel, and — lock the screen while the dialog is open, unlock, then click Save: the save must be refused with the "Timer is no longer running" alert rather than restarting the stopped timer
 
 ### Features / improvements
 - [x] Handle entries with no project — prompts to assign a project or delete the entry

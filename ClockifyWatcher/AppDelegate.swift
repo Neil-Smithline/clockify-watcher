@@ -193,27 +193,47 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
 
-        let picker = NSDatePicker(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
+        let picker = NSDatePicker(frame: NSRect(x: 0, y: 0, width: 150, height: 26))
         picker.datePickerStyle = .textFieldAndStepper
         picker.datePickerElements = .hourMinute
         picker.dateValue = prefill ?? currentStart
-        alert.accessoryView = picker
+
+        let label = NSTextField(labelWithString: "Timer started at:")
+        label.isEditable = false
+        label.isBordered = false
+        label.drawsBackground = false
+
+        let stack = NSStackView(views: [label, picker])
+        stack.orientation = .horizontal
+        stack.frame = NSRect(x: 0, y: 0, width: 300, height: 26)
+        alert.accessoryView = stack
         alert.window.initialFirstResponder = picker
 
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        switch resolveStartTime(picked: picker.dateValue, currentStart: currentStart, now: Date()) {
+        guard let freshEntry = activeEntry, freshEntry.id == entry.id,
+              let freshProjectId = freshEntry.projectId else {
+            let stale = NSAlert()
+            stale.messageText = "Timer is no longer running"
+            stale.informativeText =
+                "The running timer changed while the dialog was open, so the start time was not updated."
+            stale.runModal()
+            return
+        }
+
+        switch resolveStartTime(picked: picker.dateValue,
+                                currentStart: freshEntry.timeInterval.start, now: Date()) {
         case .failure:
             showEditStartTimeDialog(error: "Start time can only be moved earlier",
                                     prefill: picker.dateValue)
         case .success(let newStart):
             Task {
                 do {
-                    try await client.updateEntry(workspaceId: workspaceId, entryId: entry.id,
-                                                 start: newStart, projectId: projectId,
-                                                 description: entry.description,
-                                                 taskId: entry.taskId, tagIds: entry.tagIds)
+                    try await client.updateEntry(workspaceId: workspaceId, entryId: freshEntry.id,
+                                                 start: newStart, projectId: freshProjectId,
+                                                 description: freshEntry.description,
+                                                 taskId: freshEntry.taskId, tagIds: freshEntry.tagIds)
                     poll()
                 } catch {
                     await MainActor.run {

@@ -14,6 +14,9 @@ enum StartTimeError: Error, Equatable {
 /// earlier. Since `currentStart` is always at or before `now`, this also rules out
 /// future start times, and it rejects every edit to an entry that began on an earlier
 /// day.
+///
+/// Because seconds are zeroed, picking the minute the picker currently displays for
+/// `currentStart` still succeeds and moves the start earlier by `currentStart`'s seconds.
 func resolveStartTime(picked: Date,
                       currentStart: Date,
                       now: Date,
