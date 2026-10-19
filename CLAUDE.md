@@ -62,7 +62,7 @@ xcodebuild -scheme ClockifyWatcher -configuration Debug -derivedDataPath /tmp/cw
 - [x] Stop timer on power off (`NSWorkspace.willPowerOffNotification`) — note: OS gives ~8 s; slow networks may not finish in time
 - [x] Login item: install app to `/Applications`, reboot, verify it launches at login (requires macOS 13+)
 - [x] Resume dialog: on screen unlock or app launch after auto-stop, shows project picker — verify pre-selection, Start Timer, and Dismiss
-- [ ] Rate limiting: force a 429 (burn 30 requests in an hour), then verify the menu shows "Rate limited by Clockify — retrying HH:mm", the backoff grows instead of polling every 3 min, and a success clears it
+- [x] Rate limiting: menu shows "Rate limited by Clockify — retrying HH:mm" during a backoff and clears on recovery; a 429 backed off 300 s and recovered on the first retry. Untested: escalation past the first step (10 → 20 → 40 → 60 min) and the `Retry-After` path, which Clockify does not currently send
 - [ ] Edit Start Time dialog: pre-fill, saving an earlier time, rejection of a later time, Cancel, and — lock the screen while the dialog is open, unlock, then click Save: the save must be refused with the "Timer is no longer running" alert rather than restarting the stopped timer
 
 ### Features / improvements
