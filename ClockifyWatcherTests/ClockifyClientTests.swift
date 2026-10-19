@@ -165,6 +165,97 @@ final class ClockifyClientTests: XCTestCase {
         XCTAssertNotNil(body["start"])
         XCTAssertNil(body["end"], "A running entry must not be given an end time")
     }
+
+    // MARK: - Rate limiting (Clockify Free plan: 30 requests/hour)
+
+    /// The real body Clockify returns once the hourly budget is spent.
+    private static let rateLimitBody = #"""
+    {"message":"Too many requests!","code":429,"rateLimitCode":null,"customMessage":"You have reached the limit of 30 requests per hour allowed on a Free plan. To increase the rate limit please upgrade your workspace or wait for one hour."}
+    """#.data(using: .utf8)!
+
+    func testRateLimitIsItsOwnErrorAndNotAGenericHTTPError() async {
+        let client = ClockifyClient(apiKey: "key",
+                                    session: MockURLSession(data: Self.rateLimitBody, statusCode: 429))
+        do {
+            _ = try await client.fetchProjects(workspaceId: "ws1")
+            XCTFail("Expected ClockifyError.rateLimited")
+        } catch ClockifyError.rateLimited(let retryAfter) {
+            XCTAssertNil(retryAfter, "Clockify sends no Retry-After on this response")
+        } catch {
+            XCTFail("Wrong error type: \(error)")
+        }
+    }
+
+    func testRateLimitIsNotMistakenForAnExpiredKey() async {
+        // A 429 must never reach the unauthorized path: that deletes the stored key.
+        let client = ClockifyClient(apiKey: "key",
+                                    session: MockURLSession(data: Self.rateLimitBody, statusCode: 429))
+        do {
+            _ = try await client.fetchRunningEntry(workspaceId: "ws1", userId: "u1")
+            XCTFail("Expected ClockifyError.rateLimited")
+        } catch ClockifyError.unauthorized {
+            XCTFail("429 must not be reported as unauthorized")
+        } catch ClockifyError.rateLimited {
+            // expected
+        } catch {
+            XCTFail("Wrong error type: \(error)")
+        }
+    }
+
+    func testRetryAfterSecondsAreParsedWhenPresent() async {
+        let client = ClockifyClient(apiKey: "key",
+                                    session: MockURLSession(data: Data(), statusCode: 429,
+                                                            headers: ["Retry-After": "120"]))
+        do {
+            _ = try await client.fetchProjects(workspaceId: "ws1")
+            XCTFail("Expected ClockifyError.rateLimited")
+        } catch ClockifyError.rateLimited(let retryAfter) {
+            XCTAssertEqual(retryAfter, 120)
+        } catch {
+            XCTFail("Wrong error type: \(error)")
+        }
+    }
+
+    func testUnparseableRetryAfterIsTreatedAsAbsent() async {
+        let client = ClockifyClient(apiKey: "key",
+                                    session: MockURLSession(data: Data(), statusCode: 429,
+                                                            headers: ["Retry-After": "soon"]))
+        do {
+            _ = try await client.fetchProjects(workspaceId: "ws1")
+            XCTFail("Expected ClockifyError.rateLimited")
+        } catch ClockifyError.rateLimited(let retryAfter) {
+            XCTAssertNil(retryAfter)
+        } catch {
+            XCTFail("Wrong error type: \(error)")
+        }
+    }
+
+    func testWriteRequestsAlsoReportRateLimiting() async {
+        // Stopping a timer on sleep or lock must surface a 429 rather than look like success.
+        let client = ClockifyClient(apiKey: "key",
+                                    session: MockURLSession(data: Data(), statusCode: 429))
+        do {
+            try await client.stopCurrentTimer(workspaceId: "ws1", userId: "u1")
+            XCTFail("Expected ClockifyError.rateLimited")
+        } catch ClockifyError.rateLimited {
+            // expected
+        } catch {
+            XCTFail("Wrong error type: \(error)")
+        }
+    }
+
+    func testOtherHTTPErrorsStillCarryTheirStatusCode() async {
+        let client = ClockifyClient(apiKey: "key",
+                                    session: MockURLSession(data: Data(), statusCode: 503))
+        do {
+            _ = try await client.fetchProjects(workspaceId: "ws1")
+            XCTFail("Expected ClockifyError.httpError")
+        } catch ClockifyError.httpError(let code) {
+            XCTAssertEqual(code, 503)
+        } catch {
+            XCTFail("Wrong error type: \(error)")
+        }
+    }
 }
 
 // MARK: - Test helpers
@@ -172,11 +263,18 @@ final class ClockifyClientTests: XCTestCase {
 struct MockURLSession: URLSessionProtocol {
     let data: Data
     let statusCode: Int
+    let headers: [String: String]?
+
+    init(data: Data, statusCode: Int, headers: [String: String]? = nil) {
+        self.data = data
+        self.statusCode = statusCode
+        self.headers = headers
+    }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         let url = request.url ?? URL(string: "https://example.com")!
         let response = HTTPURLResponse(url: url, statusCode: statusCode,
-                                       httpVersion: nil, headerFields: nil)!
+                                       httpVersion: nil, headerFields: headers)!
         return (data, response)
     }
 }
