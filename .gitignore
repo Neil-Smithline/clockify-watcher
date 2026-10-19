@@ -3,3 +3,6 @@
 
 # Superpowers subagent-driven-development scratch (ledgers, briefs, review packages)
 .superpowers/
+
+# Xcode per-user UI state (window layout, open tabs, scroll positions)
+xcuserdata/
