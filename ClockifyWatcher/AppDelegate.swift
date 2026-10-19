@@ -7,6 +7,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var displayTimer: Timer?
 
     var consecutiveFailures = 0
+    /// 429s in a row. Drives the backoff in `nextPollDelay`.
+    var consecutiveRateLimits = 0
+    /// When the next poll is due after a 429; nil when not rate limited.
+    var rateLimitedUntil: Date?
+    private var lastPollAt: Date?
+    private var projectsFetchInFlight = false
+    private var projectsFetchBlockedUntil: Date?
+
     var cachedProjects: [String: ClockifyProject] = [:]
     /// The running entry, cached from the last poll. Non-nil only when it has a project.
     var activeEntry: ClockifyTimeEntry?
@@ -374,21 +382,43 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startPolling() {
         poll()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            self?.poll()
-        }
+        // The elapsed-time display is computed locally from the cached start, so
+        // it keeps ticking every second regardless of how often we poll.
         displayTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.updateStatusItem()
         }
     }
 
+    /// Each poll schedules the next one rather than running on a fixed repeating
+    /// timer, so a 429 can push the following attempt out. See `nextPollDelay`.
+    private func schedulePoll(after delay: TimeInterval) {
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            self?.poll()
+        }
+    }
+
+    /// True while we are inside a rate-limit backoff window.
+    var isRateLimited: Bool {
+        guard let rateLimitedUntil else { return false }
+        return rateLimitedUntil > Date()
+    }
+
+    private var pollIsStale: Bool {
+        guard let lastPollAt else { return true }
+        return Date().timeIntervalSince(lastPollAt) >= menuPollStaleness
+    }
+
     func poll() {
         guard let client, let workspaceId, let userId else { return }
+        lastPollAt = Date()
         Task {
             do {
                 let entry = try await client.fetchRunningEntry(workspaceId: workspaceId, userId: userId)
                 await MainActor.run {
                     self.consecutiveFailures = 0
+                    self.consecutiveRateLimits = 0
+                    self.rateLimitedUntil = nil
                     if let entry {
                         if let projectId = entry.projectId {
                             self.activeEntry = entry
@@ -406,6 +436,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         self.noProjectEntryId = nil
                     }
                     self.updateStatusItem()
+                    self.schedulePoll(after: nextPollDelay(after: .success,
+                                                           consecutiveRateLimits: 0))
                 }
             } catch ClockifyError.unauthorized {
                 await MainActor.run {
@@ -414,10 +446,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     KeychainHelper.deleteApiKey()
                     self.promptForApiKey(error: "Session expired. Please re-enter your API key.")
                 }
+            } catch ClockifyError.rateLimited(let retryAfter) {
+                await MainActor.run {
+                    self.consecutiveFailures += 1
+                    self.consecutiveRateLimits += 1
+                    let delay = nextPollDelay(after: .rateLimited(retryAfter: retryAfter),
+                                              consecutiveRateLimits: self.consecutiveRateLimits)
+                    self.rateLimitedUntil = Date().addingTimeInterval(delay)
+                    Log.poll.error("""
+                        rate limited (\(self.consecutiveRateLimits, privacy: .public) in a row); \
+                        next poll in \(Int(delay), privacy: .public)s
+                        """)
+                    self.updateStatusItem()
+                    self.schedulePoll(after: delay)
+                }
             } catch {
                 await MainActor.run {
                     self.consecutiveFailures += 1
+                    Log.poll.error("""
+                        poll failed (\(self.consecutiveFailures, privacy: .public) in a row): \
+                        \(error.localizedDescription, privacy: .public)
+                        """)
                     self.updateStatusItem()
+                    self.schedulePoll(after: nextPollDelay(after: .failed,
+                                                           consecutiveRateLimits: 0))
                 }
             }
         }
@@ -425,15 +477,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func refreshProjects() async {
         guard let client, let workspaceId else { return }
+        guard await beginProjectsFetch() else { return }
         do {
             let projects = try await client.fetchProjects(workspaceId: workspaceId)
             await MainActor.run {
                 self.cachedProjects = Dictionary(uniqueKeysWithValues: projects.map { ($0.id, $0) })
+                self.projectsFetchInFlight = false
+                self.projectsFetchBlockedUntil = nil
                 self.updateStatusItem()
             }
         } catch {
-            // Silently ignore — retry on next menu open or unknown projectId
+            Log.api.error("project refresh failed: \(error.localizedDescription, privacy: .public)")
+            await MainActor.run {
+                self.projectsFetchInFlight = false
+                // Hold off rather than retrying on the very next poll: a project
+                // fetch that keeps failing would otherwise double our request rate
+                // exactly when we are over the hourly quota.
+                self.projectsFetchBlockedUntil = Date().addingTimeInterval(projectsRetryCooldown)
+            }
         }
+    }
+
+    /// Claims the right to fetch projects, or declines if a fetch is in flight or
+    /// a recent one failed. Runs on the main actor so the flags stay consistent.
+    @MainActor
+    private func beginProjectsFetch() -> Bool {
+        guard !projectsFetchInFlight else { return false }
+        if let until = projectsFetchBlockedUntil, until > Date() { return false }
+        projectsFetchInFlight = true
+        return true
     }
 
     func buildMenu() -> NSMenu {
@@ -444,6 +516,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func populateMenu(_ menu: NSMenu) {
         menu.removeAllItems()
+
+        if let rateLimitedUntil, rateLimitedUntil > Date() {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            addDisabledItem(to: menu,
+                            "Rate limited by Clockify — retrying \(formatter.string(from: rateLimitedUntil))")
+            addDisabledItem(to: menu, "The Free plan allows 30 requests per hour.")
+            menu.addItem(.separator())
+        } else if consecutiveFailures >= 2 {
+            addDisabledItem(to: menu, "Can't reach Clockify — retrying")
+            menu.addItem(.separator())
+        }
 
         let sortedProjects = cachedProjects.values.sorted { $0.name < $1.name }
         for project in sortedProjects {
@@ -489,6 +573,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Quit",
                                 action: #selector(NSApplication.terminate(_:)),
                                 keyEquivalent: "q"))
+    }
+
+    private func addDisabledItem(to menu: NSMenu, _ title: String) {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        menu.addItem(item)
     }
 
     @objc func switchProject(_ sender: NSMenuItem) {
@@ -561,7 +651,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         populateMenu(menu)
-        poll()
-        Task { await refreshProjects() }
+        // Opening the menu used to cost two API requests unconditionally. Menu
+        // opens are unbounded, so on the Free plan's 30-requests-per-hour budget
+        // that alone could drain the quota. Refresh only when the cached state is
+        // actually stale, and never while serving a rate-limit backoff — a poll
+        // then would burn a request and extend the lockout.
+        if pollIsStale && !isRateLimited {
+            poll()
+        }
+        if cachedProjects.isEmpty && !isRateLimited {
+            Task { await refreshProjects() }
+        }
     }
 }

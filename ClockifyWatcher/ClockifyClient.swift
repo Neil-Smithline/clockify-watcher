@@ -51,8 +51,13 @@ struct UpdateEntryBody: Encodable {
 
 // MARK: - Errors
 
-enum ClockifyError: Error {
+enum ClockifyError: Error, Equatable {
     case unauthorized
+    /// HTTP 429. Clockify's Free plan allows 30 requests/hour per workspace; once
+    /// that is spent every data endpoint returns this until the window rolls over.
+    /// `retryAfter` carries the `Retry-After` header when the server sends one —
+    /// Clockify currently does not.
+    case rateLimited(retryAfter: TimeInterval?)
     case httpError(Int)
 }
 
@@ -63,6 +68,15 @@ protocol URLSessionProtocol {
 }
 
 extension URLSession: URLSessionProtocol {}
+
+/// RFC 7231 IMF-fixdate, the format `Retry-After` uses when it carries a date.
+private let httpDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = TimeZone(identifier: "GMT")
+    f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+    return f
+}()
 
 // MARK: - Client
 
@@ -184,10 +198,33 @@ final class ClockifyClient {
 
     private func checkResponse(_ response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse else { return }
+        let path = http.url?.path ?? "?"
         switch http.statusCode {
-        case 200...299: break
-        case 401: throw ClockifyError.unauthorized
-        default: throw ClockifyError.httpError(http.statusCode)
+        case 200...299:
+            break
+        case 401:
+            Log.api.error("401 unauthorized on \(path, privacy: .public)")
+            throw ClockifyError.unauthorized
+        case 429:
+            let retryAfter = Self.retryAfterSeconds(from: http)
+            Log.api.error("""
+                429 rate limited on \(path, privacy: .public) \
+                (Retry-After: \(retryAfter.map { String($0) } ?? "absent", privacy: .public))
+                """)
+            throw ClockifyError.rateLimited(retryAfter: retryAfter)
+        default:
+            Log.api.error("HTTP \(http.statusCode, privacy: .public) on \(path, privacy: .public)")
+            throw ClockifyError.httpError(http.statusCode)
         }
+    }
+
+    /// `Retry-After` as seconds. Handles both the delta-seconds and HTTP-date
+    /// forms; returns nil when the header is absent or unparseable.
+    private static func retryAfterSeconds(from response: HTTPURLResponse) -> TimeInterval? {
+        guard let raw = response.value(forHTTPHeaderField: "Retry-After")?
+            .trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
+        if let seconds = TimeInterval(raw) { return seconds }
+        guard let date = httpDateFormatter.date(from: raw) else { return nil }
+        return max(0, date.timeIntervalSinceNow)
     }
 }
